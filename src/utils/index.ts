@@ -18,3 +18,4 @@ export const filterReducer = (fn) => (r) => (acc, curr) =>
   fn(curr) ? r(acc, curr) : acc;
 
 export const tax = (tax: number) => (a: number) => a + (a * tax) / 100;
+export const tap = (fn) => (a) => (fn(a), a);
