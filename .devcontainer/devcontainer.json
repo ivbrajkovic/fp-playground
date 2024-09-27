@@ -1,0 +1,56 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/typescript-node
+{
+  "name": "fp-playground",
+  // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+  // "image": "mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+
+  // Configure tool-specific properties.
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "aaron-bond.better-comments",
+        "mikestead.dotenv",
+        "dsznajder.es7-react-js-snippets",
+        "PKief.material-icon-theme",
+        "johnpapa.winteriscoming",
+        "dbaeumer.vscode-eslint",
+        "Gruntfuggly.todo-tree",
+        "meganrogge.template-string-converter",
+        "esbenp.prettier-vscode",
+        "christian-kohler.path-intellisense",
+        "christian-kohler.npm-intellisense",
+        "bradgashler.htmltagwrap",
+        "mhutchie.git-graph",
+        "pomber.git-file-history",
+        "WallabyJs.console-ninja",
+        "streetsidesoftware.code-spell-checker",
+        "formulahendry.auto-rename-tag",
+        "huibizhang.codesnap-plus"
+      ]
+    }
+  },
+
+  // Features to add to the dev container. More info: https://containers.dev/features.
+  // "features": {},
+
+  // Use 'forwardPorts' to make a list of ports inside the container available locally.
+  // "forwardPorts": [],
+
+  // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+  "remoteUser": "node",
+
+  // Add the global pnpm store as a volume
+  "mounts": [
+    "source=global-pnpm-store,target=${containerWorkspaceFolder}/.pnpm-store,type=volume"
+  ],
+
+  // Add node user permissions to the pnpm store and set the store directory
+  "postCreateCommand": "sudo chown node .pnpm-store && pnpm c set store-dir .pnpm-store",
+
+  // Set container name
+  "runArgs": ["--name", "fp-playground"]
+}
