@@ -52,5 +52,5 @@
   "postCreateCommand": "sudo chown node .pnpm-store && pnpm c set store-dir .pnpm-store",
 
   // Set container name
-  "runArgs": ["--name", "fp-playground"]
+  "runArgs": ["--network=host", "--name", "fp-playground"]
 }
