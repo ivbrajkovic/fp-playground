@@ -4,62 +4,83 @@ type Left<L> = { tag: 'Left'; value: L };
 type Right<R> = { tag: 'Right'; value: R };
 type Either<L, R> = Left<L> | Right<R>;
 
-const Left = <L>(value: L): Left<L> => ({ tag: 'Left', value });
-const Right = <R>(value: R): Right<R> => ({ tag: 'Right', value });
+const left = <L>(value: L): Left<L> => ({ tag: 'Left' as const, value });
+const right = <R>(value: R): Right<R> => ({ tag: 'Right' as const, value });
 
-export class EitherTask<L extends NormalizedError, R> {
-  private constructor(private promise: Promise<Either<L, R>>) {}
+export class EitherTask<L, R> {
+  private constructor(private readonly task: () => Promise<Either<L, R>>) {}
 
-  static from<R>(promise: Promise<R>): EitherTask<NormalizedError, R> {
-    const wrappedPromise = promise.then(
-      (value) => Right<R>(value),
-      (error) => Left(NormalizedError.from(error)),
+  static of = <R>(task: () => Promise<R>): EitherTask<NormalizedError, R> => {
+    return new EitherTask(() =>
+      task()
+        .then((value) => right<R>(value))
+        .catch((error) => left(NormalizedError.from(error))),
     );
-    return new EitherTask(wrappedPromise);
+  };
+
+  map<T>(fn: (value: R) => T): EitherTask<L | NormalizedError, T> {
+    const newTask = () =>
+      this.task()
+        .then((value) => {
+          if (value.tag === 'Left') return value;
+          return right(fn(value.value));
+        })
+        .catch((error) => left(NormalizedError.from(error)));
+    return new EitherTask<L | NormalizedError, T>(newTask);
   }
 
-  public map<T>(fn: (value: R) => T) {
-    const newPromise = this.promise.then(
-      (either) => {
-        if (either.tag === 'Left') return either;
-        try {
-          const result = fn(either.value);
-          return Right(result);
-        } catch (error) {
-          return Left(NormalizedError.from(error));
-        }
-      },
-      (error) => Left(NormalizedError.from(error)),
-    );
-    return new EitherTask(newPromise);
-  }
+  chain = <T>(
+    fn: (value: R) => EitherTask<L | NormalizedError, T>,
+  ): EitherTask<L | NormalizedError, T> => {
+    const newTask = () =>
+      this.task()
+        .then((value) => {
+          if (value.tag === 'Left') return value;
+          return fn(value.value).task;
+        })
+        .catch((error) => left(NormalizedError.from(error)));
 
-  public chain<T>(fn: (value: R) => EitherTask<L, T>) {
-    const newPromise = this.promise.then(
-      (either) => {
-        if (either.tag === 'Left') return either as Either<L, T>;
-        try {
-          const resultTask = fn(either.value);
-          return resultTask.promise;
-        } catch (error) {
-          return Left(NormalizedError.from(error));
-        }
-      },
-      (error) => Left(NormalizedError.from(error)),
-    );
-    return new EitherTask(newPromise);
-  }
+    return new EitherTask(newTask);
+  };
 
-  public fold<TLeft, TRight>(
-    onLeft: (error: L) => TLeft,
-    onRight: (value: R) => TRight,
+  ap2<A, B>(
+    this: EitherTask<L, (value: A) => B>,
+    other: EitherTask<L | NormalizedError, A>,
   ) {
-    return this.promise.then(
-      (either) => {
+    const newPromise = this.task.then(
+      (value) => {
+        if (value.tag === 'Left') return value as Left<L | NormalizedError>;
+        return other.task.then((val) => {
+          if (val.tag === 'Left') return val as Left<L | NormalizedError>;
+          return right(value.value(val.value));
+        });
+      },
+      (error) => left(NormalizedError.from(error)),
+    );
+    return new EitherTask(newPromise);
+  }
+
+  ap<A, B>(
+    this: EitherTask<L, (value: A) => B>,
+    other: EitherTask<L | NormalizedError, A>,
+  ) {
+    return new EitherTask(async () => {
+      const [eitherFn, eitherValue] = await Promise.all([
+        this.task,
+        other.task,
+      ]);
+    });
+  }
+
+  fold<TLeft, TRight>(
+    onLeft: (error: L | NormalizedError) => TLeft,
+    onRight: (value: R) => TRight,
+  ): Promise<TLeft | TRight> {
+    return this.task()
+      .then((either) => {
         if (either.tag === 'Left') return onLeft(either.value);
         return onRight(either.value);
-      },
-      (error) => onLeft(error),
-    );
+      })
+      .catch((error) => onLeft(NormalizedError.from(error)));
   }
 }

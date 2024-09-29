@@ -1,11 +1,13 @@
 import reactLogo from './assets/react.svg';
 import viteLogo from '/vite.svg';
 import './App.css';
-import { eitherTest } from 'tests/either-test';
+// import { eitherTest } from 'tests/either-test';
+import { eitherTaskTest } from 'tests/either-task-test';
 
 function App() {
   const handleClick = () => {
-    eitherTest();
+    // eitherTest();
+    eitherTaskTest();
   };
 
   return (

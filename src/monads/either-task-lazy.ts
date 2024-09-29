@@ -30,10 +30,10 @@ export class EitherTaskLazy<L extends NormalizedError, R> {
             const result = fn(either.value);
             return Right(result);
           } catch (error) {
-            return Left(NormalizedError.from(error) as L);
+            return Left(NormalizedError.from(error));
           }
         },
-        (error) => Left(NormalizedError.from(error) as L),
+        (error) => Left(NormalizedError.from(error)),
       );
     return new EitherTaskLazy(newPromiseThunk);
   }
