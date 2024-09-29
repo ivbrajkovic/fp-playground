@@ -1,104 +1,73 @@
-abstract class Either<TLeft, TRight> {
-  static fromTryCatch<TLeft, TRight>(
-    fn: () => TRight,
-    onError: (error: unknown) => TLeft,
-  ): Either<TLeft, TRight> {
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { NormalizedError } from 'class/normalized-error';
+
+type Left<L> = { _tag: 'Left'; value: L };
+type Right<R> = { _tag: 'Right'; value: R };
+
+export class Either<L, R> {
+  private constructor(public container: Left<L> | Right<R>) {}
+
+  static ofLeft = <L>(value: L) =>
+    new Either<L, never>({ _tag: 'Left', value });
+  static ofRight = <R>(value: R) =>
+    new Either<never, R>({ _tag: 'Right', value });
+  static ofTryCatch = <R>(fn: () => R): Either<NormalizedError, R> => {
     try {
-      return Right.from(fn());
+      return Either.ofRight(fn());
     } catch (error) {
-      return Left.from(onError(error));
+      return Either.ofLeft(NormalizedError.from(error));
     }
+  };
+
+  getOrDefault = <T>(defaultValue: T): [L] extends [never] ? R : R | T => {
+    if (this.container._tag === 'Left') return defaultValue as any;
+    return this.container.value;
+  };
+
+  ap<A, B, L1>(
+    this: Either<L, (value: A) => B>,
+    val: Either<L1, A>,
+  ): Either<L1 | L, B> {
+    if (this.container._tag === 'Left') return this as any;
+    if (val.container._tag === 'Left') return val as any;
+    return Either.ofRight(this.container.value(val.container.value));
   }
 
-  protected abstract readonly _tag: 'Left' | 'Right';
-  protected _value: TLeft | TRight;
+  map = <R1>(fn: (value: R) => R1): Either<L, R1> => {
+    if (this.container._tag === 'Left') return this as any;
+    return Either.ofRight(fn(this.container.value));
+  };
 
-  get value(): TLeft | TRight {
-    return this._value;
-  }
+  safeMap = <R1>(fn: (value: R) => R1): Either<L | NormalizedError, R1> => {
+    if (this.container._tag === 'Left') return this as any;
+    try {
+      return Either.ofRight(fn(this.container.value));
+    } catch (error) {
+      return Either.ofLeft(NormalizedError.from(error));
+    }
+  };
 
-  get [Symbol.toStringTag]() {
-    return `${this._tag === 'Left' ? 'Left' : 'Right'}(${String(this._value)})`;
-  }
+  chain = <L1, R1>(fn: (value: R) => Either<L1, R1>): Either<L | L1, R1> => {
+    if (this.container._tag === 'Left') return this as any;
+    return fn(this.container.value);
+  };
 
-  protected constructor(value: TLeft | TRight) {
-    this._value = value;
-  }
+  safeChain = <L1, R1>(
+    fn: (value: R) => Either<L1, R1>,
+  ): Either<L | L1 | Error, R1> => {
+    if (this.container._tag === 'Left') return this as unknown as Either<L, R1>;
+    try {
+      return fn(this.container.value);
+    } catch (error) {
+      return Either.ofLeft(NormalizedError.from(error));
+    }
+  };
 
-  abstract fold<TErrorResult, TResult>(
-    onError: (error: TLeft) => TErrorResult,
-    onSuccess: (value: TRight) => TResult,
-  ): TErrorResult | TResult;
-
-  abstract map<TResult>(fn: (value: TRight) => TResult): Either<TLeft, TResult>;
-
-  abstract flatMap<TLeftResult, TRightResult>(
-    fn: (value: TRight) => Either<TLeftResult, TRightResult>,
-  ): Either<TLeft | TLeftResult, TRightResult>;
-
-  isLeft(): this is this & { _tag: 'Left' } {
-    return this._tag === 'Left';
-  }
-
-  isRight(): this is this & { _tag: 'Right' } {
-    return this._tag === 'Right';
-  }
+  fold = <TLeftResult, TRightResult>(
+    onLeft: (value: L) => TLeftResult,
+    onRight: (value: R) => TRightResult,
+  ) => {
+    if (this.container._tag === 'Left') return onLeft(this.container.value);
+    return onRight(this.container.value);
+  };
 }
-
-export class Left<TLeft> extends Either<TLeft, never> {
-  protected readonly _tag = 'Left' as const;
-  static from = <TLeft>(value: TLeft) => new Left(value);
-
-  private constructor(value: TLeft) {
-    super(value);
-  }
-
-  fold<TErrorResult, TResult>(
-    onError: (error: TLeft) => TErrorResult,
-    _onSuccess: (value: never) => TResult,
-  ): TErrorResult {
-    return onError(this._value);
-  }
-
-  map<TResult>(_fn: (value: never) => TResult): Either<TLeft, TResult> {
-    // Since this is a Left, we return it unchanged
-    return this;
-  }
-
-  flatMap<TLeftResult, TRightResult>(
-    _fn: (value: never) => Either<TLeftResult, TRightResult>,
-  ): Either<TLeft | TLeftResult, TRightResult> {
-    // Since this is a Left, we return it unchanged
-    return this;
-  }
-}
-
-export class Right<TRight> extends Either<never, TRight> {
-  protected readonly _tag = 'Right' as const;
-  static from = <TRight>(value: TRight) => new Right(value);
-
-  private constructor(value: TRight) {
-    super(value);
-  }
-
-  fold<TErrorResult, TResult>(
-    _onError: (error: never) => TErrorResult,
-    onSuccess: (value: TRight) => TResult,
-  ): TResult {
-    return onSuccess(this._value);
-  }
-
-  map<TResult>(fn: (value: TRight) => TResult): Either<never, TResult> {
-    // Apply the function to the value and wrap it in a Right
-    return new Right(fn(this._value));
-  }
-
-  flatMap<TLeftResult, TRightResult>(
-    fn: (value: TRight) => Either<TLeftResult, TRightResult>,
-  ): Either<TLeftResult, TRightResult> {
-    // Apply the function to the value and return the resulting Either
-    return fn(this._value);
-  }
-}
-
-export type EitherType<TLeft, TRight> = Left<TLeft> | Right<TRight>;

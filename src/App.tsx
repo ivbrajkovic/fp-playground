@@ -1,11 +1,11 @@
 import reactLogo from './assets/react.svg';
 import viteLogo from '/vite.svg';
 import './App.css';
-import { either2Test } from 'tests/either-2-test';
+import { eitherTest } from 'tests/either-test';
 
 function App() {
   const handleClick = () => {
-    either2Test();
+    eitherTest();
   };
 
   return (
