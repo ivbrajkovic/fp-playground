@@ -52,9 +52,9 @@ export class Either<L, R> {
     return fn(this.container.value);
   };
 
-  safeChain = <L1, R1>(
+  safeChain = <L1 = never, R1 = never>(
     fn: (value: R) => Either<L1, R1>,
-  ): Either<L | L1 | Error, R1> => {
+  ): Either<L | L1 | NormalizedError, R1> => {
     if (this.container._tag === 'Left') return this as unknown as Either<L, R1>;
     try {
       return fn(this.container.value);

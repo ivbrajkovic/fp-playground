@@ -19,3 +19,7 @@ export const filterReducer = (fn) => (r) => (acc, curr) =>
 
 export const tax = (tax: number) => (a: number) => a + (a * tax) / 100;
 export const tap = (fn) => (a) => (fn(a), a);
+
+// random number between min and max
+export const random = (min: number, max: number) =>
+  Math.floor(Math.random() * (max - min + 1) + min);

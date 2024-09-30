@@ -9,7 +9,7 @@ const createRightTask = <R>(value: R) =>
 const createLeftTask = (error: Error) =>
   EitherTask.of(() => Promise.reject(error));
 
-describe('EitherTask', () => {
+describe('EitherTask Monad', () => {
   describe('Creation', () => {
     it('should create a Right value when the task succeeds', async () => {
       const task = createRightTask(42);
