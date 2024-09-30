@@ -157,7 +157,7 @@ describe('Either Monad', () => {
       expect(result.container.value).toBe(ERROR_MESSAGE);
     });
 
-    it('should handle errors in safeMap without executing subsequent maps', () => {
+    it('should handle errors in tryMap without executing subsequent maps', () => {
       const result = Either.ofRight(42) //
         .map(addOneFn)
         .tryMap(throwErrorFn)
