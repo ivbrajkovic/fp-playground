@@ -1,8 +1,7 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NormalizedError } from 'class/normalized-error';
 
-type Left<L> = { _tag: 'Left'; value: L };
-type Right<R> = { _tag: 'Right'; value: R };
+export type Left<L> = { _tag: 'Left'; value: L };
+export type Right<R> = { _tag: 'Right'; value: R };
 
 export class Either<L, R> {
   private constructor(public container: Left<L> | Right<R>) {}
@@ -33,8 +32,8 @@ export class Either<L, R> {
     return Either.ofRight(this.container.value(val.container.value));
   }
 
-  map = <R1>(fn: (value: R) => R1): Either<L, R1> => {
-    if (this.container._tag === 'Left') return this as any;
+  map = <R1>(fn: (value: R) => R1): Either<L, R1 | R> => {
+    if (this.container._tag === 'Left') return this;
     return Either.ofRight(fn(this.container.value));
   };
 

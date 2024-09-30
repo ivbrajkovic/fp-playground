@@ -1,9 +1,48 @@
 import { NormalizedError } from 'class/normalized-error';
-import { Either } from 'monads/either';
+import { Either, Left } from 'monads/either';
 import { random } from 'utils';
-import { describe, it, expect } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  afterEach,
+  beforeEach,
+  afterAll,
+  assertType,
+  assert,
+} from 'vitest';
 
 describe('Either Monad', () => {
+  const LEFT = 'Left';
+  const RIGHT = 'Right';
+  const ERROR_MESSAGE = 'Test error';
+  const BAD_LUCK_ERROR = 'Bad luck, number is too large';
+
+  let addOneFn: (x: number) => number;
+  let addOTwoFn: (x: number) => number;
+  let doubleFn: (x: number) => number;
+  let tripleFn: (x: number) => number;
+  let throwErrorFn: () => never;
+
+  beforeEach(() => {
+    addOneFn = vi.fn((x: number) => x + 1);
+    addOTwoFn = vi.fn((x: number) => x + 2);
+    doubleFn = vi.fn((x: number) => x * 2);
+    tripleFn = vi.fn((x: number) => x * 3);
+    throwErrorFn = vi.fn(() => {
+      throw new Error(ERROR_MESSAGE);
+    });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterAll(() => {
+    vi.clearAllMocks();
+  });
+
   describe('Creation', () => {
     it('should create a Left value', () => {
       const either = Either.ofLeft('Error');
@@ -50,27 +89,58 @@ describe('Either Monad', () => {
 
   describe('Map', () => {
     it('should correctly map over Right value', () => {
-      const either = Either.ofRight(42);
-      const result = either.map((x) => x + 1);
-      expect(result.container._tag).toBe('Right');
-      expect(result.container.value).toBe(43);
+      const result = Either.ofRight(42);
+      expect(result.container._tag).toBe(RIGHT);
+      expect(result.container.value).toBe(42);
+    });
+
+    it('should handle multiple map operations', () => {
+      const result = Either.ofRight(10)
+        .map(addOneFn)
+        .map(addOTwoFn)
+        .map(doubleFn)
+        .map(tripleFn);
+      expect(result.container._tag).toBe(RIGHT);
+      expect(result.container.value).toBe(78);
     });
 
     it('should return same Left when mapping over Left', () => {
-      const either = Either.ofLeft('Error');
-      const result = either.map((x) => (x as number) + 1);
-      expect(result.container._tag).toBe('Left');
-      expect(result.container.value).toBe('Error');
+      const result = Either.ofLeft(ERROR_MESSAGE) //
+        .map(addOneFn)
+        .map(doubleFn);
+      expect(addOneFn).not.toHaveBeenCalled();
+      expect(doubleFn).not.toHaveBeenCalled();
+      expect(result.container._tag).toBe(LEFT);
+      expect(result.container.value).toBe(ERROR_MESSAGE);
     });
 
     it('should safely map and catch errors', () => {
-      const either = Either.ofRight(42);
-      const result = either.safeMap(() => {
-        throw new Error('Test error');
-      });
-      expect(result.container._tag).toBe('Left');
-      expect(result.container.value).toBeInstanceOf(NormalizedError);
-      expect(result.container.value.message).toBe('Test error');
+      const result = Either.ofRight(42) //
+        .map(addOneFn)
+        .safeMap(throwErrorFn)
+        .map(doubleFn);
+      expect(doubleFn).not.toHaveBeenCalled();
+      assert(result.container.value instanceof NormalizedError);
+      expect(result.container._tag).toBe(LEFT);
+      expect(result.container.value.message).toBe(ERROR_MESSAGE);
+    });
+
+    it('should safely map right values and catch errors', () => {
+      const randomNumber = random(0, 10);
+      const result = Either.ofRight(randomNumber) //
+        .map(addOneFn)
+        .safeMap((value) => {
+          if (value > 5) throw new Error(BAD_LUCK_ERROR);
+          return value;
+        })
+        .map(doubleFn);
+      if (result.container.value instanceof NormalizedError) {
+        expect(result.container._tag).toBe(LEFT);
+        expect(result.container.value.message).toBe(BAD_LUCK_ERROR);
+      } else {
+        expect(result.container._tag).toBe(RIGHT);
+        expect(result.container.value).toBe((randomNumber + 1) * 2);
+      }
     });
   });
 
@@ -99,7 +169,7 @@ describe('Either Monad', () => {
       expect(result.container.value.message).toBe('Test error');
     });
 
-    it('should safely chain right value and catch errors', () => {
+    it('should safely chain right values and catch errors', () => {
       const randomNumber = random(0, 10);
       const either = Either.ofRight(randomNumber);
       const result = either.safeChain((value) => {
