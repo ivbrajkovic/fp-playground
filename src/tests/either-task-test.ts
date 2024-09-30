@@ -19,21 +19,22 @@ const delayReject =
 
 export const eitherTaskTest = async () => {
   const result = await EitherTask.of(delayResolve(100, 1000))
-    .map((x) => x * 2)
-    .map((x) => x * 2)
-    .map((x) => {
-      throw 'Throw inside map';
-      // if (value === 'error') throw 'Throw inside map';
-      // if (value === 'error') throw { error: 'Throw inside map' };
-      // if (value === 'error') throw new Error('Throw inside map');
-      return x;
-    })
+    // .map((x) => x * 2)
+    // .map((x) => x * 2)
+    // .map((x) => {
+    //   throw 'Throw inside map';
+    //   // if (value === 'error') throw 'Throw inside map';
+    //   // if (value === 'error') throw { error: 'Throw inside map' };
+    //   // if (value === 'error') throw new Error('Throw inside map');
+    //   return x;
+    // })
+    .chain((x) => EitherTask.of(delayResolve(x + 1, 1000)))
     // .chain(et2.map.bind(null).chain)
     // .chain((value) => {
     //   const et = et2.chain((innerValue) => innerValue + ' ' + value);
     //   return et;
     // })
-    // .map((value) => value + ' and again')
+    .map((value) => value + ' and again')
     .fold(
       (err) => `Error: ${err.message}`,
       (result) => `Success: ${result}`,
