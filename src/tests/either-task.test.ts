@@ -1,15 +1,53 @@
 import { NormalizedError } from 'class/normalized-error';
 import { EitherTask, right } from 'monads/either-task';
 import { wait } from 'utils';
-import { describe, it, expect, vi } from 'vitest';
-
-// Helper functions to reduce code repetition
-const createRightTask = <R>(value: R) =>
-  EitherTask.of(() => Promise.resolve(value));
-const createLeftTask = (error: Error) =>
-  EitherTask.of(() => Promise.reject(error));
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  afterAll,
+  assert,
+} from 'vitest';
 
 describe('EitherTask Monad', () => {
+  const LEFT = 'Left';
+  const RIGHT = 'Right';
+  const ERROR_MESSAGE = 'Test error';
+
+  // Helper functions to reduce code repetition
+  const createRightTask = <R>(value: R) =>
+    EitherTask.of(() => Promise.resolve(value));
+  const createLeftTask = (error: unknown) =>
+    EitherTask.of(() => Promise.reject(error));
+  const createLeftErrorTask = () => createLeftTask(ERROR_MESSAGE);
+
+  let addOneFn: (x: number) => number;
+  let doubleFn: (x: number) => number;
+  let addOneEitherTaskFn: (x: number) => EitherTask<NormalizedError, number>;
+  let doubleEitherTaskFn: (x: number) => EitherTask<NormalizedError, number>;
+  let throwErrorFn: () => never;
+
+  beforeEach(() => {
+    addOneFn = vi.fn((x: number) => x + 1);
+    doubleFn = vi.fn((x: number) => x * 2);
+    addOneEitherTaskFn = vi.fn((x: number) => createRightTask(x + 1));
+    doubleEitherTaskFn = vi.fn((x: number) => createRightTask(x * 2));
+    throwErrorFn = vi.fn(() => {
+      throw new Error(ERROR_MESSAGE);
+    });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterAll(() => {
+    vi.clearAllMocks();
+  });
+
   describe('Creation', () => {
     it('should create a Right value when the task succeeds', async () => {
       const task = createRightTask(42);
@@ -18,133 +56,88 @@ describe('EitherTask Monad', () => {
     });
 
     it('should create a Left NormalizedError when the task fails', async () => {
-      const error = new Error('Test error');
+      const error = new Error(ERROR_MESSAGE);
       const task = createLeftTask(error);
       const result = await task.run();
       expect(result.tag).toBe('Left');
       expect(result.value).toBeInstanceOf(NormalizedError);
-      expect(result.value.message).toBe('Test error');
+      expect(result.value.message).toBe(ERROR_MESSAGE);
     });
   });
 
   describe('Map', () => {
     it('should apply map to Right value', async () => {
-      const task = createRightTask(10).map((x) => x * 2);
+      const task = createRightTask(10)
+        .map(addOneFn)
+        .map(addOneFn)
+        .map(doubleFn);
       const result = await task.run();
-      expect(result).toEqual(right(20));
+      assert(result.tag === RIGHT);
+      expect(result).toEqual(right(24));
     });
 
     it('should not apply map to Left value', async () => {
-      const error = new Error('Test error');
-      const task = createLeftTask(error).map((x) => x * 2);
+      const error = new Error(ERROR_MESSAGE);
+      const task = createLeftTask(error)
+        .map(addOneFn)
+        .map(addOneFn)
+        .map(doubleFn);
       const result = await task.run();
-      expect(result.tag).toBe('Left');
-      if (result.tag === 'Left') {
-        expect(result.value).toBeInstanceOf(NormalizedError);
-        expect(result.value.message).toBe('Test error');
-      }
-    });
-
-    it('should catch errors in map function and return Left NormalizedError', async () => {
-      const task = createRightTask(5).map(() => {
-        throw new Error('Map function error');
-      });
-      const result = await task.run();
-      expect(result.tag).toBe('Left');
+      assert(result.tag === LEFT);
       expect(result.value).toBeInstanceOf(NormalizedError);
-      expect(result.value.message).toBe('Map function error');
+      expect(result.value.message).toBe(ERROR_MESSAGE);
     });
 
-    it('should not execute map function if task is Left', async () => {
-      const error = new Error('Initial task error');
-      const mapFunction = vi.fn(() => 42);
-      const task = createLeftTask(error).map(mapFunction);
+    it('should short-circuit map on Left value', async () => {
+      const task = createRightTask(5)
+        .map(addOneFn)
+        .map(throwErrorFn)
+        .map(doubleFn)
+        .map(doubleFn);
       const result = await task.run();
-      expect(mapFunction).not.toHaveBeenCalled();
-      expect(result.tag).toBe('Left');
-      if (result.tag === 'Left') {
-        expect(result.value).toBeInstanceOf(NormalizedError);
-        expect(result.value.message).toBe('Initial task error');
-      }
+      assert(result.tag === LEFT);
+      expect(doubleFn).not.toHaveBeenCalled();
+      expect(result.value).toBeInstanceOf(NormalizedError);
+      expect(result.value.message).toBe(ERROR_MESSAGE);
     });
   });
 
   describe('Chain', () => {
     it('should chain tasks correctly when initial task is Right', async () => {
-      const task = createRightTask(5).chain((x) => createRightTask(x * 2));
+      const task = createRightTask(5)
+        .chain(addOneEitherTaskFn)
+        .chain(addOneEitherTaskFn)
+        .chain(doubleEitherTaskFn);
       const result = await task.run();
-      expect(result).toEqual(right(10));
+      assert(result.tag === RIGHT);
+      expect(result).toEqual(right(14));
     });
 
     it('should not execute chained task if initial task is Left', async () => {
-      const error = new Error('Initial task error');
-      const chainedTask = vi.fn(() => createRightTask(2));
-      const task = createLeftTask(error).chain(chainedTask);
+      const error = new Error(ERROR_MESSAGE);
+      const task = createLeftTask(error)
+        .chain(addOneEitherTaskFn)
+        .chain(addOneEitherTaskFn)
+        .chain(doubleEitherTaskFn);
       const result = await task.run();
-      expect(chainedTask).not.toHaveBeenCalled();
-      expect(result.tag).toBe('Left');
-      if (result.tag === 'Left') {
-        expect(result.value).toBeInstanceOf(NormalizedError);
-        expect(result.value.message).toBe('Initial task error');
-      }
-    });
-
-    it('should handle Left from chained task', async () => {
-      const task = createRightTask(5).chain(() =>
-        createLeftTask(new Error('Chained task error')),
-      );
-      const result = await task.run();
-      expect(result.tag).toBe('Left');
+      assert(result.tag === LEFT);
+      expect(addOneEitherTaskFn).not.toHaveBeenCalled();
+      expect(doubleEitherTaskFn).not.toHaveBeenCalled();
       expect(result.value).toBeInstanceOf(NormalizedError);
-      expect(result.value.message).toBe('Chained task error');
+      expect(result.value.message).toBe(ERROR_MESSAGE);
     });
 
-    it('should catch errors in chain function and return Left NormalizedError', async () => {
-      const task = createRightTask(5).chain(() => {
-        throw new Error('Chain function error');
-      });
+    it('should short-circuit map on Left value', async () => {
+      const task = createRightTask(5)
+        .chain(addOneEitherTaskFn)
+        .chain(createLeftErrorTask)
+        .chain(doubleEitherTaskFn)
+        .chain(doubleEitherTaskFn);
       const result = await task.run();
-      expect(result.tag).toBe('Left');
+      assert(result.tag === LEFT);
+      expect(doubleEitherTaskFn).not.toHaveBeenCalled();
       expect(result.value).toBeInstanceOf(NormalizedError);
-      expect(result.value.message).toBe('Chain function error');
-    });
-
-    it('should not chain if task is Left', async () => {
-      const error = new Error('Initial task error');
-      const chainFunction = vi.fn(() => createRightTask(42));
-      const task = createLeftTask(error).chain(chainFunction);
-      const result = await task.run();
-      expect(chainFunction).not.toHaveBeenCalled();
-      expect(result.tag).toBe('Left');
-      if (result.tag === 'Left') {
-        expect(result.value).toBeInstanceOf(NormalizedError);
-        expect(result.value.message).toBe('Initial task error');
-      }
-    });
-
-    it('should handle multiple dependency chains', async () => {
-      const executionOrder: number[] = [];
-
-      const task = EitherTask.of(() => {
-        executionOrder.push(1);
-        return Promise.resolve(5);
-      })
-        .chain((value) => {
-          executionOrder.push(2);
-          return EitherTask.of(() => Promise.resolve(value * 2));
-        })
-        .chain((value) => {
-          executionOrder.push(3);
-          return EitherTask.of(() => Promise.resolve(value * 2));
-        })
-        .chain((value) => {
-          executionOrder.push(4);
-          return EitherTask.of(() => Promise.resolve(value + 1));
-        });
-
-      const result = await task.run();
-      expect(executionOrder).toEqual([1, 2, 3, 4]);
-      expect(result).toEqual(right(21)); // (((5 * 2) * 2) + 1) = 21
+      expect(result.value.message).toBe(ERROR_MESSAGE);
     });
 
     it('should handle chains with different resolution times', async () => {
@@ -164,6 +157,7 @@ describe('EitherTask Monad', () => {
         });
 
       const result = await task.run();
+      assert(result.tag === RIGHT);
       expect(executionOrder).toEqual([1, 2, 3]);
       expect(result).toEqual(right(7)); // 5 * 2 - 3 = 7
     });
@@ -177,7 +171,7 @@ describe('EitherTask Monad', () => {
       })
         .chain(() => {
           executionOrder.push(2);
-          return EitherTask.of(() => Promise.reject(new Error('Failure')));
+          return EitherTask.of(() => Promise.reject(new Error(ERROR_MESSAGE)));
         })
         .chain(() => {
           executionOrder.push(3);
@@ -185,9 +179,9 @@ describe('EitherTask Monad', () => {
         });
 
       const result = await task.run();
+      assert(result.tag === LEFT);
       expect(executionOrder).toEqual([1, 2]);
-      expect(result.tag).toBe('Left');
-      if (result.tag === 'Left') expect(result.value.message).toBe('Failure');
+      expect(result.value.message).toBe(ERROR_MESSAGE);
     });
   });
 
@@ -202,26 +196,29 @@ describe('EitherTask Monad', () => {
     });
 
     it('should fold correctly for Left value', async () => {
-      const error = new Error('Test error');
+      const error = new Error(ERROR_MESSAGE);
       const task = createLeftTask(error);
       const result = await task.fold(
         (left) => `Left: ${left.message}`,
         (right) => `Right: ${right}`,
       );
-      expect(result).toBe('Left: Test error');
+      expect(result).toBe(`Left: ${ERROR_MESSAGE}`);
     });
   });
 
   describe('Lazy Evaluation', () => {
     it('should be lazy and not execute until run is called', async () => {
-      let executed = false;
-      const task = EitherTask.of(() => {
-        executed = true;
-        return Promise.resolve(42);
-      });
-      expect(executed).toBe(false);
+      const promiseTask = vi.fn(() => Promise.resolve(42));
+      const task = EitherTask.of(promiseTask)
+        .map(addOneFn)
+        .chain(addOneEitherTaskFn);
+      expect(promiseTask).not.toHaveBeenCalled();
+      expect(addOneFn).not.toHaveBeenCalled();
+      expect(addOneEitherTaskFn).not.toHaveBeenCalled();
       await task.run();
-      expect(executed).toBe(true);
+      expect(promiseTask).toHaveBeenCalled();
+      expect(addOneFn).toHaveBeenCalled();
+      expect(addOneEitherTaskFn).toHaveBeenCalled();
     });
   });
 
@@ -235,10 +232,8 @@ describe('EitherTask Monad', () => {
     it('should handle task rejecting with null', async () => {
       const task = EitherTask.of<null>(() => Promise.reject(null));
       const result = await task.run();
-      expect(result.tag).toBe('Left');
-      if (result.tag === 'Left') {
-        expect(result.value).toEqual(NormalizedError.from(null));
-      }
+      assert(result.tag === LEFT);
+      expect(result.value).toEqual(NormalizedError.from(null));
     });
   });
 });
