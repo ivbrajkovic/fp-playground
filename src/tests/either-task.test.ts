@@ -206,6 +206,105 @@ describe('EitherTask Monad', () => {
     });
   });
 
+  describe('Ap', () => {
+    it('should apply the function of the right value to the right value', async () => {
+      const addThree =
+        (a: number) =>
+        (b: number) =>
+        (c: number): number =>
+          a + b + c;
+      const task = createRightTask(addThree)
+        .ap(createRightTask(5))
+        .ap(createRightTask(10))
+        .ap(createRightTask(15));
+      const result = await task.run();
+      assert(result.tag === RIGHT);
+      expect(result).toEqual(right(30));
+    });
+
+    it('should not apply the function of the right value to the left value', async () => {
+      const error = new Error(ERROR_MESSAGE);
+      const task = createRightTask(addOneFn).ap(createLeftTask(error));
+      const result = await task.run();
+      assert(result.tag === LEFT);
+      expect(result.value).toBeInstanceOf(NormalizedError);
+      expect(result.value.message).toBe(ERROR_MESSAGE);
+    });
+
+    it('should not apply the function of the left value to the right value', async () => {
+      const error = new Error(ERROR_MESSAGE);
+      const task = createLeftTask(error).ap(createRightTask(5));
+      const result = await task.run();
+      assert(result.tag === LEFT);
+      expect(result.value).toBeInstanceOf(NormalizedError);
+      expect(result.value.message).toBe(ERROR_MESSAGE);
+    });
+
+    it('should not apply the function of the left value to the left value', async () => {
+      const error1 = new Error(ERROR_MESSAGE);
+      const error2 = new Error('Another error');
+      const task = createLeftTask(error1).ap(createLeftTask(error2));
+      const result = await task.run();
+      assert(result.tag === LEFT);
+      expect(result.value).toBeInstanceOf(NormalizedError);
+      expect(result.value.message).toBe(ERROR_MESSAGE);
+    });
+
+    it('should short-circuit ap on Left value', async () => {
+      const addThree =
+        (a: number) =>
+        (b: number) =>
+        (c: number): number =>
+          a + b + c;
+      const task = createRightTask(addThree)
+        .ap(createRightTask(5))
+        .ap(createLeftErrorTask())
+        .ap(createRightTask(10));
+      const result = await task.run();
+      assert(result.tag === LEFT);
+      expect(result.value).toBeInstanceOf(NormalizedError);
+      expect(result.value.message).toBe(ERROR_MESSAGE);
+    });
+
+    it('should handle ap with different resolution times', async () => {
+      const executionOrder: number[] = [];
+
+      const addThree =
+        (a: number) =>
+        (b: number) =>
+        (c: number): number =>
+          a + b + c;
+
+      const task = EitherTask.of(() => {
+        executionOrder.push(1);
+        return wait(100).then(() => addThree);
+      })
+        .ap(
+          EitherTask.of(() => {
+            executionOrder.push(2);
+            return wait(200).then(() => 5);
+          }),
+        )
+        .ap(
+          EitherTask.of(() => {
+            executionOrder.push(3);
+            return wait(50).then(() => 10);
+          }),
+        )
+        .ap(
+          EitherTask.of(() => {
+            executionOrder.push(4);
+            return wait(300).then(() => 15);
+          }),
+        );
+
+      const result = await task.run();
+      assert(result.tag === RIGHT);
+      expect(executionOrder).toEqual([1, 2, 3, 4]);
+      expect(result).toEqual(right(30));
+    });
+  });
+
   describe('Lazy Evaluation', () => {
     it('should be lazy and not execute until run is called', async () => {
       const promiseTask = vi.fn(() => Promise.resolve(42));
